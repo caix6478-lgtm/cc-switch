@@ -616,6 +616,142 @@
       return board;
     }
 
+    // ========== 游戏状态管理 ==========
+
+    const GameState = {
+      level: 1,
+      board: [],
+      selected: null,      // {r, c} | null
+      score: 0,
+      combo: 0,
+      timeLeft: 0,
+      timerInterval: null,
+      hintsLeft: 3,
+      shufflesLeft: 1,
+      isPaused: false,
+      isOver: false,
+      totalPairs: 0,
+      matchedPairs: 0,
+    };
+
+    function initGameState(levelId) {
+      const level = LEVELS.find(l => l.id === levelId);
+      if (!level) return;
+
+      GameState.level = levelId;
+      GameState.board = generateSolvableBoard(level);
+      GameState.selected = null;
+      GameState.score = 0;
+      GameState.combo = 0;
+      GameState.timeLeft = level.time === Infinity ? -1 : level.time;
+      GameState.hintsLeft = level.hints;
+      GameState.shufflesLeft = level.shuffles;
+      GameState.isPaused = false;
+      GameState.isOver = false;
+
+      // Count actual pairs on board
+      let count = 0;
+      for (const row of GameState.board) {
+        for (const cell of row) {
+          if (cell !== null) count++;
+        }
+      }
+      GameState.totalPairs = Math.floor(count / 2);
+      GameState.matchedPairs = 0;
+
+      if (GameState.timerInterval) clearInterval(GameState.timerInterval);
+      if (GameState.timeLeft > 0) {
+        GameState.timerInterval = setInterval(tickTimer, 1000);
+      }
+    }
+
+    function tickTimer() {
+      if (GameState.isPaused || GameState.isOver) return;
+      GameState.timeLeft--;
+      updateTimerDisplay();
+      if (GameState.timeLeft <= 0) {
+        gameOver(false);
+      }
+    }
+
+    function gameOver(won) {
+      GameState.isOver = true;
+      if (GameState.timerInterval) clearInterval(GameState.timerInterval);
+      showResult(won);
+    }
+
+    function removePair(r1, c1, r2, c2) {
+      GameState.board[r1][c1] = null;
+      GameState.board[r2][c2] = null;
+      GameState.matchedPairs++;
+      GameState.combo++;
+      GameState.score += 100 * GameState.combo;
+
+      updateBoardDisplay();
+      updateStatusDisplay();
+
+      // Check win
+      if (GameState.matchedPairs >= GameState.totalPairs) {
+        // Add time bonus
+        if (GameState.timeLeft > 0) {
+          GameState.score += GameState.timeLeft * 5;
+        }
+        gameOver(true);
+        return;
+      }
+
+      // Check if any moves remain
+      if (!hasValidMove(GameState.board)) {
+        if (GameState.shufflesLeft > 0) {
+          doShuffle();
+        } else {
+          gameOver(false);
+        }
+      }
+    }
+
+    function selectTile(r, c) {
+      if (GameState.isPaused || GameState.isOver) return;
+      if (GameState.board[r][c] === null) return;
+
+      if (GameState.selected === null) {
+        // First selection
+        GameState.selected = { r, c };
+        highlightTile(r, c, true);
+      } else if (GameState.selected.r === r && GameState.selected.c === c) {
+        // Deselect
+        highlightTile(GameState.selected.r, GameState.selected.c, false);
+        GameState.selected = null;
+      } else if (GameState.board[r][c].id === GameState.board[GameState.selected.r][GameState.selected.c].id) {
+        // Same type — try to match
+        const path = findPath(
+          GameState.board,
+          GameState.selected.r, GameState.selected.c,
+          r, c
+        );
+        if (path) {
+          // Valid match!
+          highlightTile(GameState.selected.r, GameState.selected.c, false);
+          animateMatch(GameState.selected.r, GameState.selected.c, r, c, path);
+          const sr = GameState.selected.r, sc = GameState.selected.c;
+          GameState.selected = null;
+          removePair(sr, sc, r, c);
+        } else {
+          // Can't connect — switch selection
+          highlightTile(GameState.selected.r, GameState.selected.c, false);
+          GameState.selected = { r, c };
+          highlightTile(r, c, true);
+          GameState.combo = 0;
+        }
+      } else {
+        // Different type — switch selection
+        highlightTile(GameState.selected.r, GameState.selected.c, false);
+        GameState.selected = { r, c };
+        highlightTile(r, c, true);
+        GameState.combo = 0;
+      }
+    }
+
   </script>
 </body>
 </html>
