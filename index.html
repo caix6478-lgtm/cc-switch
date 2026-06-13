@@ -272,7 +272,118 @@
   </div>
 
   <script>
-    // JavaScript logic will be added in subsequent tasks
+    // ========== 牌面定义 ==========
+
+    // 筒 (Dots): CSS-drawn dot patterns
+    const TONG = [
+      { id: 'tong1', suit: 'tong', name: '一筒', value: 1, display: 'dot-1' },
+      { id: 'tong2', suit: 'tong', name: '二筒', value: 2, display: 'dot-2' },
+      { id: 'tong3', suit: 'tong', name: '三筒', value: 3, display: 'dot-3' },
+      { id: 'tong4', suit: 'tong', name: '四筒', value: 4, display: 'dot-4' },
+      { id: 'tong5', suit: 'tong', name: '五筒', value: 5, display: 'dot-5' },
+      { id: 'tong6', suit: 'tong', name: '六筒', value: 6, display: 'dot-6' },
+      { id: 'tong7', suit: 'tong', name: '七筒', value: 7, display: 'dot-7' },
+      { id: 'tong8', suit: 'tong', name: '八筒', value: 8, display: 'dot-8' },
+      { id: 'tong9', suit: 'tong', name: '九筒', value: 9, display: 'dot-9' },
+    ];
+
+    // 条 (Bamboo): CSS-drawn vertical lines
+    const TIAO = [
+      { id: 'tiao1', suit: 'tiao', name: '一条', value: 1, display: 'line-1' },
+      { id: 'tiao2', suit: 'tiao', name: '二条', value: 2, display: 'line-2' },
+      { id: 'tiao3', suit: 'tiao', name: '三条', value: 3, display: 'line-3' },
+      { id: 'tiao4', suit: 'tiao', name: '四条', value: 4, display: 'line-4' },
+      { id: 'tiao5', suit: 'tiao', name: '五条', value: 5, display: 'line-5' },
+      { id: 'tiao6', suit: 'tiao', name: '六条', value: 6, display: 'line-6' },
+      { id: 'tiao7', suit: 'tiao', name: '七条', value: 7, display: 'line-7' },
+      { id: 'tiao8', suit: 'tiao', name: '八条', value: 8, display: 'line-8' },
+      { id: 'tiao9', suit: 'tiao', name: '九条', value: 9, display: 'line-9' },
+    ];
+
+    // 万 (Characters): Chinese characters
+    const WAN = [
+      { id: 'wan1', suit: 'wan', name: '一万', value: 1, display: '一万' },
+      { id: 'wan2', suit: 'wan', name: '二万', value: 2, display: '二万' },
+      { id: 'wan3', suit: 'wan', name: '三万', value: 3, display: '三万' },
+      { id: 'wan4', suit: 'wan', name: '四万', value: 4, display: '四万' },
+      { id: 'wan5', suit: 'wan', name: '五万', value: 5, display: '五万' },
+      { id: 'wan6', suit: 'wan', name: '六万', value: 6, display: '六万' },
+      { id: 'wan7', suit: 'wan', name: '七万', value: 7, display: '七万' },
+      { id: 'wan8', suit: 'wan', name: '八万', value: 8, display: '八万' },
+      { id: 'wan9', suit: 'wan', name: '九万', value: 9, display: '九万' },
+    ];
+
+    // 风 (Winds)
+    const FENG = [
+      { id: 'dong', suit: 'feng', name: '东', value: 1, display: '东' },
+      { id: 'nan',  suit: 'feng', name: '南', value: 2, display: '南' },
+      { id: 'xi',   suit: 'feng', name: '西', value: 3, display: '西' },
+      { id: 'bei',  suit: 'feng', name: '北', value: 4, display: '北' },
+    ];
+
+    // 箭 (Dragons)
+    const JIAN = [
+      { id: 'zhong', suit: 'jian', name: '中', value: 1, display: '中' },
+      { id: 'fa',    suit: 'jian', name: '发', value: 2, display: '发' },
+      { id: 'bai',   suit: 'jian', name: '白', value: 3, display: '白' },
+    ];
+
+    const ALL_TILES = [...TONG, ...TIAO, ...WAN, ...FENG, ...JIAN];
+
+    // ========== 关卡定义 ==========
+
+    const LEVELS = [
+      {
+        id: 1, rows: 4, cols: 4, tileCount: 16,
+        suits: ['tong'], types: 4, time: Infinity,
+        hints: 3, shuffles: 1,
+      },
+      {
+        id: 2, rows: 4, cols: 6, tileCount: 24,
+        suits: ['tong', 'tiao'], types: 6, time: 180,
+        hints: 3, shuffles: 1,
+      },
+      {
+        id: 3, rows: 6, cols: 6, tileCount: 36,
+        suits: ['tong', 'tiao', 'wan'], types: 9, time: 150,
+        hints: 2, shuffles: 1,
+      },
+      {
+        id: 4, rows: 6, cols: 8, tileCount: 48,
+        suits: ['tong', 'tiao', 'wan', 'feng'], types: 12, time: 150,
+        hints: 2, shuffles: 1,
+      },
+      {
+        id: 5, rows: 8, cols: 8, tileCount: 64,
+        suits: ['tong', 'tiao', 'wan', 'feng', 'jian'], types: 16, time: 120,
+        hints: 2, shuffles: 1,
+      },
+      {
+        id: 6, rows: 8, cols: 10, tileCount: 80,
+        suits: ['tong', 'tiao', 'wan', 'feng', 'jian'], types: 20, time: 120,
+        hints: 1, shuffles: 1,
+      },
+      {
+        id: 7, rows: 10, cols: 10, tileCount: 100,
+        suits: ['tong', 'tiao', 'wan', 'feng', 'jian'], types: 25, time: 100,
+        hints: 1, shuffles: 1,
+      },
+      {
+        id: 8, rows: 10, cols: 12, tileCount: 120,
+        suits: ['tong', 'tiao', 'wan', 'feng', 'jian'], types: 30, time: 90,
+        hints: 1, shuffles: 0,
+      },
+      {
+        id: 9, rows: 12, cols: 12, tileCount: 144,
+        suits: ['tong', 'tiao', 'wan', 'feng', 'jian'], types: 34, time: 80,
+        hints: 1, shuffles: 0,
+      },
+      {
+        id: 10, rows: 12, cols: 12, tileCount: 144,
+        suits: ['tong', 'tiao', 'wan', 'feng', 'jian'], types: 34, time: 60,
+        hints: 0, shuffles: 0,
+      },
+    ];
   </script>
 </body>
 </html>
