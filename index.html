@@ -61,6 +61,7 @@
       font-weight: bold;
       cursor: pointer;
       box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      touch-action: manipulation;
     }
 
     #btn-start:active {
@@ -131,6 +132,7 @@
       color: #1a5c2a;
       font-weight: bold;
       cursor: pointer;
+      touch-action: manipulation;
     }
 
     #btn-bar button:active {
@@ -928,8 +930,10 @@
     // ========== 棋盘渲染 ==========
 
     const boardEl = document.getElementById('board');
+    if (!boardEl) console.error('board element not found');
 
     function renderBoard() {
+      if (!boardEl) return;
       const { board } = GameState;
       const rows = board.length;
       const cols = board[0].length;
@@ -1031,7 +1035,7 @@
     // ========== 消除动画 & 连线 ==========
 
     const pathCanvas = document.getElementById('path-canvas');
-    const pathCtx = pathCanvas.getContext('2d');
+    const pathCtx = pathCanvas ? pathCanvas.getContext('2d') : null;
 
     function animateMatch(r1, c1, r2, c2, pathPoints) {
       // Draw connection line
@@ -1046,6 +1050,7 @@
     }
 
     function drawConnectionPath(points) {
+      if (!pathCanvas || !pathCtx) return;
       const container = document.getElementById('board-container');
       pathCanvas.width = container.offsetWidth;
       pathCanvas.height = container.offsetHeight;
@@ -1329,9 +1334,12 @@
       document.addEventListener('contextmenu', e => e.preventDefault());
 
       // Prevent double-tap zoom on board
-      document.getElementById('board').addEventListener('touchstart', e => {
-        if (e.touches.length > 1) e.preventDefault();
-      }, { passive: false });
+      const boardElForTouch = document.getElementById('board');
+      if (boardElForTouch) {
+        boardElForTouch.addEventListener('touchstart', e => {
+          if (e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
+      }
 
       renderLevelSelect();
       showScreen('menu-screen');
