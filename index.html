@@ -477,13 +477,26 @@
      * Get available tile types for a level
      */
     function getAvailableTiles(level) {
+      // Collect parallel arrays of tiles per suit
+      const suitTileArrays = level.suits.map(suit =>
+        ALL_TILES.filter(t => t.suit === suit)
+      );
+
+      // Round-robin interleave to distribute evenly across suits
       const tiles = [];
-      for (const suit of level.suits) {
-        const suitTiles = ALL_TILES.filter(t => t.suit === suit);
-        tiles.push(...suitTiles);
+      let idx = 0;
+      while (tiles.length < level.types) {
+        let added = false;
+        for (const arr of suitTileArrays) {
+          if (idx < arr.length && tiles.length < level.types) {
+            tiles.push(arr[idx]);
+            added = true;
+          }
+        }
+        if (!added) break; // no more tiles available
+        idx++;
       }
-      // Limit to level.types count
-      return tiles.slice(0, level.types);
+      return tiles;
     }
 
     /**
@@ -505,6 +518,19 @@
     function generateBoard(level) {
       const { rows, cols, tileCount } = level;
       const available = getAvailableTiles(level);
+
+      // Guard: need at least one tile type
+      if (available.length === 0) {
+        console.error('No available tile types for level', level.id);
+        return Array.from({ length: rows }, () => Array(cols).fill(null));
+      }
+
+      // Guard: tileCount must be even for pairing
+      if (tileCount % 2 !== 0) {
+        console.error('tileCount must be even, got', tileCount);
+        return Array.from({ length: rows }, () => Array(cols).fill(null));
+      }
+
       const board = Array.from({ length: rows }, () => Array(cols).fill(null));
 
       // Create pairs: we need tileCount/2 pairs
@@ -570,6 +596,8 @@
       return false;
     }
 
+    const MAX_GENERATION_ATTEMPTS = 100;
+
     /**
      * Generate a board that is guaranteed to have at least one valid move
      */
@@ -579,8 +607,9 @@
       do {
         board = generateBoard(level);
         attempts++;
-        if (attempts > 100) {
+        if (attempts >= MAX_GENERATION_ATTEMPTS) {
           // Fallback: just return whatever we have
+          console.warn('Could not generate solvable board after', MAX_GENERATION_ATTEMPTS, 'attempts');
           break;
         }
       } while (!hasValidMove(board));
