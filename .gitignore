@@ -1,0 +1,4 @@
+.playwright-mcp/
+backups/
+*.db
+logs/
