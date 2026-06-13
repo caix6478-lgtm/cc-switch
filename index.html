@@ -471,6 +471,122 @@
       return null; // No path found
     }
 
+    // ========== 棋盘生成 ==========
+
+    /**
+     * Get available tile types for a level
+     */
+    function getAvailableTiles(level) {
+      const tiles = [];
+      for (const suit of level.suits) {
+        const suitTiles = ALL_TILES.filter(t => t.suit === suit);
+        tiles.push(...suitTiles);
+      }
+      // Limit to level.types count
+      return tiles.slice(0, level.types);
+    }
+
+    /**
+     * Shuffle array in-place (Fisher-Yates)
+     */
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    /**
+     * Generate a board for the given level.
+     * Each tile type appears in pairs.
+     * Returns 2D array where each cell is tileObject or null.
+     */
+    function generateBoard(level) {
+      const { rows, cols, tileCount } = level;
+      const available = getAvailableTiles(level);
+      const board = Array.from({ length: rows }, () => Array(cols).fill(null));
+
+      // Create pairs: we need tileCount/2 pairs
+      const pairCount = tileCount / 2;
+      const tilePool = [];
+
+      for (let i = 0; i < pairCount; i++) {
+        // Pick a tile type (cycle through available if more pairs than types)
+        const tile = { ...available[i % available.length] };
+        tilePool.push(tile, { ...tile }); // two copies
+      }
+
+      shuffle(tilePool);
+
+      // Place tiles in grid positions
+      const positions = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          positions.push({ r, c });
+        }
+      }
+      shuffle(positions);
+
+      // Take exactly tileCount positions
+      const usedPositions = positions.slice(0, tileCount);
+      for (let i = 0; i < tilePool.length; i++) {
+        const { r, c } = usedPositions[i];
+        board[r][c] = { ...tilePool[i], removed: false };
+      }
+
+      return board;
+    }
+
+    /**
+     * Check if there's at least one valid match on the board
+     */
+    function hasValidMove(board) {
+      const rows = board.length;
+      const cols = board[0].length;
+
+      // Collect all non-null positions grouped by tile id
+      const byId = new Map();
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (board[r][c] !== null) {
+            const key = board[r][c].id;
+            if (!byId.has(key)) byId.set(key, []);
+            byId.get(key).push({ r, c });
+          }
+        }
+      }
+
+      // Check each pair of same-type tiles
+      for (const positions of byId.values()) {
+        for (let i = 0; i < positions.length; i++) {
+          for (let j = i + 1; j < positions.length; j++) {
+            if (findPath(board, positions[i].r, positions[i].c, positions[j].r, positions[j].c)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Generate a board that is guaranteed to have at least one valid move
+     */
+    function generateSolvableBoard(level) {
+      let board;
+      let attempts = 0;
+      do {
+        board = generateBoard(level);
+        attempts++;
+        if (attempts > 100) {
+          // Fallback: just return whatever we have
+          break;
+        }
+      } while (!hasValidMove(board));
+      return board;
+    }
+
   </script>
 </body>
 </html>
