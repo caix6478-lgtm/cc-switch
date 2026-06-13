@@ -107,6 +107,7 @@
       justify-content: center;
       align-items: center;
       overflow: hidden;
+      position: relative;
     }
 
     #board {
@@ -221,6 +222,134 @@
     #pause-overlay #btn-resume:active {
       transform: scale(0.96);
     }
+
+    /* ========== Tile Styles ========== */
+
+    .tile {
+      aspect-ratio: 1;
+      background: #f5f0e8;
+      border: 2px solid #c8b896;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 1px 2px 3px rgba(0,0,0,0.3);
+      position: relative;
+      transition: transform 0.15s, box-shadow 0.15s;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      font-size: clamp(10px, 3.5vw, 18px);
+      font-weight: bold;
+      color: #333;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .tile:active {
+      transform: scale(0.93);
+    }
+
+    .tile.selected {
+      box-shadow: 0 0 0 3px #ff6600, 0 0 8px rgba(255,102,0,0.5);
+      transform: scale(1.05);
+    }
+
+    .tile.hint-glow {
+      animation: hintPulse 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes hintPulse {
+      from { box-shadow: 0 0 0 3px #ffcc00, 0 0 8px rgba(255,204,0,0.5); }
+      to   { box-shadow: 0 0 0 6px #ffcc00, 0 0 12px rgba(255,204,0,0.8); }
+    }
+
+    .tile.removing {
+      animation: tileRemove 0.3s ease-out forwards;
+    }
+
+    @keyframes tileRemove {
+      to { transform: scale(0); opacity: 0; }
+    }
+
+    .tile.empty {
+      visibility: hidden;
+    }
+
+    /* Dot patterns (筒) */
+    .tile .dot-container {
+      display: grid;
+      gap: 1px;
+      width: 75%;
+      height: 75%;
+    }
+
+    .tile.dots-1 .dot-container { grid-template: "a" 1fr / 1fr; }
+    .tile.dots-1 .dot { place-self: center; }
+
+    .tile.dots-2 .dot-container { grid-template: "a ." 1fr ". b" 1fr / 1fr 1fr; }
+
+    .tile.dots-3 .dot-container { grid-template: "a ." 1fr "b c" 1fr / 1fr 1fr; }
+    .tile.dots-3 .dot:nth-child(1) { grid-area: a; }
+    .tile.dots-3 .dot:nth-child(2) { grid-area: b; }
+    .tile.dots-3 .dot:nth-child(3) { grid-area: c; }
+
+    .tile.dots-4 .dot-container { grid-template: "a b" 1fr "c d" 1fr / 1fr 1fr; }
+
+    .tile.dots-5 .dot-container { grid-template: "a . b" 1fr ". c ." 1fr "d . e" 1fr / 1fr 1fr 1fr; }
+
+    .tile.dots-6 .dot-container { grid-template: "a b" 1fr "c d" 1fr "e f" 1fr / 1fr 1fr; }
+
+    .tile.dots-7 .dot-container { grid-template: "a . b" 1fr "c d e" 1fr "f . g" 1fr / 1fr 1fr 1fr; }
+
+    .tile.dots-8 .dot-container { grid-template: "a b c" 1fr "d . e" 1fr "f g h" 1fr / 1fr 1fr 1fr; }
+
+    .tile.dots-9 .dot-container { grid-template: "a b c" 1fr "d e f" 1fr "g h i" 1fr / 1fr 1fr 1fr; }
+
+    .dot {
+      width: 28%;
+      aspect-ratio: 1;
+      background: #333;
+      border-radius: 50%;
+      place-self: center;
+    }
+
+    /* Line patterns (条) */
+    .tile .line-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 2px;
+      width: 70%;
+      height: 60%;
+    }
+
+    .bamboo-line {
+      width: 3px;
+      height: 100%;
+      background: #2d8a4e;
+      border-radius: 2px;
+    }
+
+    /* Chinese character tiles (万/风/箭) */
+    .tile.char-tile {
+      font-size: clamp(14px, 4vw, 22px);
+      color: #333;
+    }
+
+    .tile.suit-wan { color: #c41e3a; }
+    .tile.suit-feng { color: #1a3a8a; }
+
+    /* Match path canvas */
+    #path-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
   </style>
 </head>
 <body>
@@ -244,6 +373,7 @@
       </div>
       <div id="board-container">
         <div id="board"></div>
+        <canvas id="path-canvas"></canvas>
       </div>
       <div id="btn-bar">
         <button id="btn-hint">提示 <span class="count" id="hints-count">(3)</span></button>
@@ -750,6 +880,164 @@
         highlightTile(r, c, true);
         GameState.combo = 0;
       }
+    }
+
+    // ========== 棋盘渲染 ==========
+
+    const boardEl = document.getElementById('board');
+
+    function renderBoard() {
+      const { board } = GameState;
+      const rows = board.length;
+      const cols = board[0].length;
+
+      boardEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      boardEl.style.display = 'grid';
+      boardEl.style.gap = '2px';
+      boardEl.innerHTML = '';
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const tile = board[r][c];
+          const cellEl = document.createElement('div');
+          cellEl.className = 'tile';
+          cellEl.dataset.r = r;
+          cellEl.dataset.c = c;
+
+          if (tile !== null) {
+            if (tile.suit === 'tong') {
+              cellEl.classList.add(`dots-${tile.value}`);
+              cellEl.innerHTML = renderDotPattern(tile.value);
+            } else if (tile.suit === 'tiao') {
+              cellEl.innerHTML = renderLinePattern(tile.value);
+            } else {
+              // 万, 风, 箭 — display Chinese characters
+              cellEl.classList.add('char-tile');
+              cellEl.classList.add(`suit-${tile.suit}`);
+              cellEl.textContent = tile.display;
+            }
+
+            cellEl.addEventListener('click', () => selectTile(r, c));
+          } else {
+            cellEl.classList.add('empty');
+          }
+
+          boardEl.appendChild(cellEl);
+        }
+      }
+
+      resizeBoard();
+    }
+
+    function renderDotPattern(count) {
+      let dots = '';
+      for (let i = 0; i < count; i++) {
+        dots += '<div class="dot"></div>';
+      }
+      return `<div class="dot-container">${dots}</div>`;
+    }
+
+    function renderLinePattern(count) {
+      let lines = '';
+      for (let i = 0; i < count; i++) {
+        lines += '<div class="bamboo-line"></div>';
+      }
+      return `<div class="line-container">${lines}</div>`;
+    }
+
+    function updateBoardDisplay() {
+      const cells = boardEl.querySelectorAll('.tile');
+      cells.forEach(cell => {
+        const r = parseInt(cell.dataset.r);
+        const c = parseInt(cell.dataset.c);
+        if (GameState.board[r][c] === null) {
+          cell.innerHTML = '';
+          cell.className = 'tile empty';
+        }
+      });
+    }
+
+    function highlightTile(r, c, on) {
+      const cell = boardEl.querySelector(`.tile[data-r="${r}"][data-c="${c}"]`);
+      if (cell) cell.classList.toggle('selected', on);
+    }
+
+    function resizeBoard() {
+      const container = document.getElementById('board-container');
+      const maxWidth = container.clientWidth - 16;
+      const maxHeight = container.clientHeight - 16;
+      const rows = GameState.board.length;
+      if (rows === 0) return;
+      const cols = GameState.board[0].length;
+      if (cols === 0) return;
+
+      const gapSize = 2;
+      const fromWidth = (maxWidth - (cols - 1) * gapSize) / cols;
+      const fromHeight = (maxHeight - (rows - 1) * gapSize) / rows;
+      const tileSize = Math.floor(Math.min(fromWidth, fromHeight));
+
+      boardEl.style.gridTemplateRows = `repeat(${rows}, ${tileSize}px)`;
+      boardEl.style.gridTemplateColumns = `repeat(${cols}, ${tileSize}px)`;
+      boardEl.style.width = 'auto';
+      boardEl.style.height = 'auto';
+    }
+
+    window.addEventListener('resize', resizeBoard);
+
+    // ========== 消除动画 & 连线 ==========
+
+    const pathCanvas = document.getElementById('path-canvas');
+    const pathCtx = pathCanvas.getContext('2d');
+
+    function animateMatch(r1, c1, r2, c2, pathPoints) {
+      // Draw connection line
+      drawConnectionPath(pathPoints);
+
+      // Animate tile removal
+      const cell1 = boardEl.querySelector(`.tile[data-r="${r1}"][data-c="${c1}"]`);
+      const cell2 = boardEl.querySelector(`.tile[data-r="${r2}"][data-c="${c2}"]`);
+
+      if (cell1) cell1.classList.add('removing');
+      if (cell2) cell2.classList.add('removing');
+    }
+
+    function drawConnectionPath(points) {
+      const container = document.getElementById('board-container');
+      pathCanvas.width = container.offsetWidth;
+      pathCanvas.height = container.offsetHeight;
+
+      const boardRect = boardEl.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+
+      const offsetX = boardRect.left - containerRect.left;
+      const offsetY = boardRect.top - containerRect.top;
+
+      const rows = GameState.board.length;
+      const cols = GameState.board[0].length;
+      const cellW = boardEl.offsetWidth / cols;
+      const cellH = boardEl.offsetHeight / rows;
+
+      pathCtx.clearRect(0, 0, pathCanvas.width, pathCanvas.height);
+
+      pathCtx.strokeStyle = '#ff4444';
+      pathCtx.lineWidth = 4;
+      pathCtx.lineCap = 'round';
+      pathCtx.lineJoin = 'round';
+
+      pathCtx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const px = offsetX + points[i].c * cellW + cellW / 2;
+        const py = offsetY + points[i].r * cellH + cellH / 2;
+        if (i === 0) pathCtx.moveTo(px, py);
+        else pathCtx.lineTo(px, py);
+      }
+      pathCtx.stroke();
+
+      // Clear after 300ms
+      setTimeout(() => {
+        pathCtx.clearRect(0, 0, pathCanvas.width, pathCanvas.height);
+      }, 300);
     }
 
   </script>
