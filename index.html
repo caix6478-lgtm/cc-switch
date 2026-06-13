@@ -350,19 +350,61 @@
       pointer-events: none;
       z-index: 10;
     }
+
+    /* ========== Menu & Level Select ========== */
+
+    .level-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .level-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      border: 2px solid #e8b84b;
+      background: transparent;
+      color: #e8b84b;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .level-btn.locked {
+      border-color: #666;
+      color: #666;
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .level-btn:not(.locked):active {
+      background: #e8b84b;
+      color: #1a5c2a;
+    }
+
+    /* ========== Responsive ========== */
+
+    @media (orientation: landscape) and (max-height: 500px) {
+      #btn-bar { padding: 4px 8px; gap: 4px; }
+      #btn-bar button { padding: 6px 8px; font-size: 12px; }
+      #top-bar { padding: 2px 16px; font-size: 14px; }
+      #status-bar { padding: 2px 16px; }
+    }
   </style>
 </head>
 <body>
   <div id="app">
     <!-- Menu Screen -->
-    <div id="menu-screen">
+    <div id="menu-screen" class="screen">
       <h1>🀄 麻将连连看</h1>
       <button id="btn-start">开始游戏</button>
       <div id="level-select"></div>
     </div>
 
     <!-- Game Screen -->
-    <div id="game-screen" style="display:none">
+    <div id="game-screen" class="screen" style="display:none">
       <div id="top-bar">
         <span id="level-label">关卡 1</span>
         <span id="timer">00:00</span>
@@ -384,7 +426,7 @@
     </div>
 
     <!-- Result Screen -->
-    <div id="result-screen">
+    <div id="result-screen" class="screen">
       <div class="result-title" id="result-title">恭喜过关!</div>
       <div class="result-score" id="result-score">得分: 0</div>
       <div class="result-buttons">
@@ -1039,6 +1081,263 @@
         pathCtx.clearRect(0, 0, pathCanvas.width, pathCanvas.height);
       }, 300);
     }
+
+    // ========== 提示 & 洗牌 ==========
+
+    function findHintPair() {
+      const { board } = GameState;
+      const rows = board.length;
+      const cols = board[0].length;
+      const byId = new Map();
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (board[r][c] !== null) {
+            const key = board[r][c].id;
+            if (!byId.has(key)) byId.set(key, []);
+            byId.get(key).push({ r, c });
+          }
+        }
+      }
+
+      for (const positions of byId.values()) {
+        for (let i = 0; i < positions.length; i++) {
+          for (let j = i + 1; j < positions.length; j++) {
+            if (findPath(board, positions[i].r, positions[i].c, positions[j].r, positions[j].c)) {
+              return { pos1: positions[i], pos2: positions[j] };
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function useHint() {
+      if (GameState.isPaused || GameState.isOver) return;
+      if (GameState.hintsLeft <= 0) return;
+
+      const pair = findHintPair();
+      if (!pair) return;
+
+      GameState.hintsLeft--;
+      GameState.score = Math.max(0, GameState.score - 30);
+      document.getElementById('hints-count').textContent = GameState.hintsLeft;
+      updateStatusDisplay();
+
+      const cell1 = boardEl.querySelector(`.tile[data-r="${pair.pos1.r}"][data-c="${pair.pos1.c}"]`);
+      const cell2 = boardEl.querySelector(`.tile[data-r="${pair.pos2.r}"][data-c="${pair.pos2.c}"]`);
+
+      if (cell1) cell1.classList.add('hint-glow');
+      if (cell2) cell2.classList.add('hint-glow');
+
+      setTimeout(() => {
+        if (cell1) cell1.classList.remove('hint-glow');
+        if (cell2) cell2.classList.remove('hint-glow');
+      }, 2000);
+    }
+
+    function doShuffle() {
+      if (GameState.shufflesLeft <= 0) return;
+
+      GameState.shufflesLeft--;
+      document.getElementById('shuffles-count').textContent = GameState.shufflesLeft;
+
+      // Collect remaining tiles
+      const tiles = [];
+      for (let r = 0; r < GameState.board.length; r++) {
+        for (let c = 0; c < GameState.board[0].length; c++) {
+          if (GameState.board[r][c] !== null) {
+            tiles.push(GameState.board[r][c]);
+          }
+        }
+      }
+
+      shuffle(tiles);
+
+      // Re-place tiles
+      let idx = 0;
+      for (let r = 0; r < GameState.board.length; r++) {
+        for (let c = 0; c < GameState.board[0].length; c++) {
+          if (GameState.board[r][c] !== null) {
+            GameState.board[r][c] = { ...tiles[idx++] };
+          }
+        }
+      }
+
+      // Clear selection
+      if (GameState.selected) {
+        highlightTile(GameState.selected.r, GameState.selected.c, false);
+        GameState.selected = null;
+      }
+
+      // Re-render
+      renderBoard();
+
+      // Ensure solvability
+      if (!hasValidMove(GameState.board)) {
+        const level = LEVELS.find(l => l.id === GameState.level);
+        GameState.board = generateSolvableBoard(level);
+        renderBoard();
+      }
+    }
+
+    // ========== 界面切换 & 按钮处理 ==========
+
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+      const screen = document.getElementById(screenId);
+      if (screen) screen.style.display = 'flex';
+    }
+
+    function showMenu() {
+      if (GameState.timerInterval) clearInterval(GameState.timerInterval);
+      GameState.isOver = true;
+      showScreen('menu-screen');
+      renderLevelSelect();
+    }
+
+    function startLevel(levelId) {
+      initGameState(levelId);
+      renderBoard();
+      updateStatusDisplay();
+      updateTimerDisplay();
+      document.getElementById('level-label').textContent = `第 ${levelId} 关`;
+      document.getElementById('hints-count').textContent = GameState.hintsLeft;
+      document.getElementById('shuffles-count').textContent = GameState.shufflesLeft;
+      showScreen('game-screen');
+    }
+
+    function showResult(won) {
+      showScreen('result-screen');
+      const titleEl = document.getElementById('result-title');
+      const scoreEl = document.getElementById('result-score');
+      const btnNext = document.getElementById('btn-next');
+
+      if (won) {
+        titleEl.textContent = '🎉 恭喜过关！';
+        scoreEl.textContent = `得分: ${GameState.score}`;
+
+        const unlocked = getUnlockedLevel();
+        if (GameState.level >= unlocked) {
+          setUnlockedLevel(GameState.level + 1);
+        }
+
+        const nextLevel = LEVELS.find(l => l.id === GameState.level + 1);
+        btnNext.style.display = nextLevel ? 'inline-block' : 'none';
+        if (!nextLevel) titleEl.textContent = '🏆 全部通关！';
+      } else {
+        if (GameState.timeLeft <= 0) {
+          titleEl.textContent = '⏰ 时间耗尽！';
+        } else {
+          titleEl.textContent = '😞 无路可走！';
+        }
+        scoreEl.textContent = `得分: ${GameState.score}`;
+        btnNext.style.display = 'none';
+      }
+    }
+
+    function updateStatusDisplay() {
+      document.getElementById('score-label').textContent = `分数: ${GameState.score}`;
+      const comboEl = document.getElementById('combo-label');
+      comboEl.textContent = GameState.combo > 1 ? `🔥 连击 x${GameState.combo}` : '';
+    }
+
+    function updateTimerDisplay() {
+      const timerEl = document.getElementById('timer');
+      if (GameState.timeLeft < 0) {
+        timerEl.textContent = '⏱ --:--';
+      } else {
+        const m = Math.floor(GameState.timeLeft / 60);
+        const s = GameState.timeLeft % 60;
+        timerEl.textContent = `⏱ ${m}:${String(s).padStart(2, '0')}`;
+      }
+    }
+
+    function pauseGame() {
+      GameState.isPaused = true;
+      document.getElementById('pause-overlay').style.display = 'flex';
+    }
+
+    function resumeGame() {
+      GameState.isPaused = false;
+      document.getElementById('pause-overlay').style.display = 'none';
+    }
+
+    function restartLevel() {
+      resumeGame();
+      startLevel(GameState.level);
+    }
+
+    // ========== localStorage 持久化 ==========
+
+    function getUnlockedLevel() {
+      try {
+        return parseInt(localStorage.getItem('mahjong_unlocked')) || 1;
+      } catch { return 1; }
+    }
+
+    function setUnlockedLevel(level) {
+      try {
+        localStorage.setItem('mahjong_unlocked', level);
+      } catch { /* ignore */ }
+    }
+
+    // ========== 主菜单关卡选择 ==========
+
+    function renderLevelSelect() {
+      const container = document.getElementById('level-select');
+      const unlocked = getUnlockedLevel();
+      let html = '<div class="level-grid">';
+
+      for (const level of LEVELS) {
+        const locked = level.id > unlocked;
+        html += `<button class="level-btn${locked ? ' locked' : ''}"
+          data-level="${level.id}"${locked ? ' disabled' : ''}>
+          ${locked ? '🔒' : level.id}
+        </button>`;
+      }
+      html += '</div>';
+      container.innerHTML = html;
+
+      container.querySelectorAll('.level-btn:not(.locked)').forEach(btn => {
+        btn.addEventListener('click', () => startLevel(parseInt(btn.dataset.level)));
+      });
+    }
+
+    // ========== 初始化事件绑定 ==========
+
+    function init() {
+      document.getElementById('btn-start').addEventListener('click', () => {
+        startLevel(1);
+      });
+
+      document.getElementById('btn-hint').addEventListener('click', useHint);
+      document.getElementById('btn-shuffle').addEventListener('click', doShuffle);
+      document.getElementById('btn-pause').addEventListener('click', pauseGame);
+      document.getElementById('btn-restart').addEventListener('click', restartLevel);
+      document.getElementById('btn-resume').addEventListener('click', resumeGame);
+      document.getElementById('btn-next').addEventListener('click', () => {
+        startLevel(GameState.level + 1);
+      });
+      document.getElementById('btn-retry').addEventListener('click', () => {
+        startLevel(GameState.level);
+      });
+      document.getElementById('btn-menu').addEventListener('click', showMenu);
+
+      // Prevent context menu on long press
+      document.addEventListener('contextmenu', e => e.preventDefault());
+
+      // Prevent double-tap zoom on board
+      document.getElementById('board').addEventListener('touchstart', e => {
+        if (e.touches.length > 1) e.preventDefault();
+      }, { passive: false });
+
+      renderLevelSelect();
+      showScreen('menu-screen');
+    }
+
+    // Start the app when DOM is ready
+    document.addEventListener('DOMContentLoaded', init);
 
   </script>
 </body>
